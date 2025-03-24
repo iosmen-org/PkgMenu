@@ -1,0 +1,74 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <dirent.h>
+#include <sysutil/sysutil.h>
+#include <io/pad.h>
+#include <ppu-types.h>
+
+#define MAX_FILES 128
+#define USB_PATH "/dev_usb000/" // USB sürücüsü yolu
+
+char pkg_files[MAX_FILES][256];
+int file_count = 0;
+int selected = 0;
+
+// USB'deki PKG dosyalarını listele
+void scan_pkg_files() {
+    DIR *dir;
+    struct dirent *entry;
+    file_count = 0;
+
+    dir = opendir(USB_PATH);
+    if (dir == NULL) {
+        printf("USB okunamadi!\n");
+        return;
+    }
+
+    while ((entry = readdir(dir)) != NULL) {
+        if (strstr(entry->d_name, ".pkg") != NULL) {
+            snprintf(pkg_files[file_count], sizeof(pkg_files[file_count]), "%s%s", USB_PATH, entry->d_name);
+            file_count++;
+            if (file_count >= MAX_FILES) break;
+        }
+    }
+    closedir(dir);
+}
+
+// PKG yükleme komutu
+void install_pkg(const char *pkg_path) {
+    char command[512];
+    snprintf(command, sizeof(command), "installpkg %s", pkg_path);
+    system(command);
+}
+
+int main() {
+    padInfo padinfo;
+    padData paddata;
+
+    // PKG'leri tara
+    scan_pkg_files();
+
+    while (1) {
+        ioPadGetInfo(&padinfo);
+        for (int i = 0; i < MAX_PADS; i++) {
+            if (padinfo.status[i]) {
+                ioPadGetData(i, &paddata);
+
+                if (paddata.BTN_UP) {
+                    selected = (selected > 0) ? selected - 1 : file_count - 1;
+                }
+                if (paddata.BTN_DOWN) {
+                    selected = (selected < file_count - 1) ? selected + 1 : 0;
+                }
+                if (paddata.BTN_CROSS) {
+                    install_pkg(pkg_files[selected]);
+                }
+                if (paddata.BTN_CIRCLE) {
+                    return 0; // Çıkış
+                }
+            }
+        }
+    }
+    return 0;
+}
